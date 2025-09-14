@@ -1,4 +1,3 @@
-# /Users/amitnir/Desktop/code/clite/lang/tokens.py
 """
 Token definitions for clite.
 Lexer lives in a separate module; this file only defines token types,
@@ -29,6 +28,9 @@ class Token:
     value: str
     line: int = 0
     column: int = 0
+
+    def __str__(self):
+        return f"Token(type={self.type}, value='{self.value}', line={self.line}, column={self.column})"
 
 # Basic keywords of the language (extend as needed)
 KEYWORDS: Set[str] = {
