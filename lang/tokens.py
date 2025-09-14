@@ -21,6 +21,18 @@ class TokenType(Enum):
     # others
     KEYWORD = auto()
     EOF = auto()
+    LBRACE = auto()
+    RBRACE = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
+    SEMICOLON = auto()
+    COMMA = auto()
+    DOT = auto()
+    COLON = auto()
+    ASSIGN = auto()
+    END = auto()  # statement terminator    
 
 @dataclass(frozen=True)
 class Token:
@@ -34,9 +46,14 @@ class Token:
 
 # Basic keywords of the language (extend as needed)
 KEYWORDS: Set[str] = {
-    "if", "else", "while", "for", "return",
-    "break", "continue", "struct", "typedef",
-    "var", "const", "func", "true", "false", "null",
+    # control flow
+    "if", "else", "while", "for", "return", "break", "continue",
+    # declarations / functions
+    "let", "fn",
+    # types / misc (future use)
+    "struct", "typedef", "var", "const", "func",
+    # literals
+    "true", "false", "null",
 }
 
 # Operators and punctuation (kept here for reference / reuse by the lexer)
