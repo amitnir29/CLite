@@ -19,6 +19,9 @@ from lang.ast import (
     Literal,
     Identifier,
     Expr,
+    BinaryExpr,
+    UnaryExpr,
+    CallExpr,
 )
 from lang.tokens import Token, TokenType
 
@@ -119,6 +122,7 @@ class Interpreter:
                     closure=self.globals,
                 )
                 self.functions[fn.name] = fn
+                self.globals.set(fn.name, fn)
 
         # Execute top-level statements (non-function declarations)
         for stmt in program.statements:
@@ -229,7 +233,67 @@ class Interpreter:
         if isinstance(node, Identifier):
             return env.get(node.name.value)
 
-        # Future: handle BinaryExpr, UnaryExpr, function calls, etc.
+        if isinstance(node, UnaryExpr):
+            op = node.operator.value
+            val = self.eval_expr(node.operand, env)
+            if op == '!':
+                return not self.truthy(val)
+            if op == '-':
+                return -val
+            raise RuntimeError(f"Unsupported unary operator: {op}")
+
+        if isinstance(node, BinaryExpr):
+            op = node.operator.value
+            # Short-circuit for logical ops
+            if op == '&&':
+                left = self.eval_expr(node.left, env)
+                if not self.truthy(left):
+                    return False
+                right = self.eval_expr(node.right, env)
+                return self.truthy(right)
+            if op == '||':
+                left = self.eval_expr(node.left, env)
+                if self.truthy(left):
+                    return True
+                right = self.eval_expr(node.right, env)
+                return self.truthy(right)
+
+            left = self.eval_expr(node.left, env)
+            right = self.eval_expr(node.right, env)
+            if op == '+':
+                return left + right
+            if op == '-':
+                return left - right
+            if op == '*':
+                return left * right
+            if op == '/':
+                return left / right
+            if op == '%':
+                return left % right
+            if op == '<':
+                return left < right
+            if op == '<=':
+                return left <= right
+            if op == '>':
+                return left > right
+            if op == '>=':
+                return left >= right
+            if op == '==':
+                return left == right
+            if op == '!=':
+                return left != right
+            raise RuntimeError(f"Unsupported binary operator: {op}")
+
+        if isinstance(node, CallExpr):
+            callee_val = self.eval_expr(node.callee, env)
+            args = [self.eval_expr(a, env) for a in node.args]
+            if isinstance(callee_val, Function):
+                return callee_val.call(self, args)
+            if callable(callee_val):
+                return callee_val(*args)
+            raise RuntimeError("Attempted to call a non-callable value")
+
+        # Future: more expression kinds
         raise RuntimeError(f"Unsupported expression node: {type(node).__name__}")
 
     # --- Utils ---
@@ -240,6 +304,13 @@ class Interpreter:
             return float(tok.value)
         if tok.type == TokenType.STRING:
             return self._unquote(tok.value)
+        if tok.type == TokenType.KEYWORD:
+            if tok.value == 'true':
+                return True
+            if tok.value == 'false':
+                return False
+            if tok.value == 'null':
+                return None
         # For identifiers used as literals (shouldn't happen), return raw value
         return tok.value
 
@@ -258,4 +329,3 @@ def run(code: str, entrypoint: Optional[str] = None) -> Any:
 
 
 __all__ = ["Interpreter", "run", "Env", "Function"]
-

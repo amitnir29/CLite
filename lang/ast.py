@@ -73,3 +73,8 @@ class Literal(Expr):
 class Identifier(Expr):
     def __init__(self, name: Token):
         self.name = name
+
+class CallExpr(Expr):
+    def __init__(self, callee: Expr, args: list[Expr]):
+        self.callee = callee
+        self.args = args

@@ -1,4 +1,4 @@
-from lang.ast import Program, VarDecl, FuncDecl, IfStmt, WhileStmt, ForStmt, ReturnStmt, BreakStmt, ContinueStmt, AssignStmt, Expr, BinaryExpr, UnaryExpr, Literal, Identifier
+from lang.ast import Program, VarDecl, FuncDecl, IfStmt, WhileStmt, ForStmt, ReturnStmt, BreakStmt, ContinueStmt, AssignStmt, Expr, BinaryExpr, UnaryExpr, Literal, Identifier, CallExpr
 from lang.tokens import Token, TokenType, KEYWORDS
 
 class Parser:
@@ -137,20 +137,96 @@ class Parser:
             statements.append(self.parse_statement())
         return statements
 
-    # --- Expression parsing (very basic, just identifiers and literals for now) ---
+    # --- Expression parsing with precedence ---
     def parse_expression(self):
+        return self.parse_or()
+
+    def parse_or(self):
+        expr = self.parse_and()
+        while self._check_value("||"):
+            op = self.consume()
+            right = self.parse_and()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_and(self):
+        expr = self.parse_equality()
+        while self._check_value("&&"):
+            op = self.consume()
+            right = self.parse_equality()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_equality(self):
+        expr = self.parse_relational()
+        while self._check_value("==") or self._check_value("!="):
+            op = self.consume()
+            right = self.parse_relational()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_relational(self):
+        expr = self.parse_additive()
+        while any(
+            self._check_value(v) for v in ("<", "<=", ">", ">=")
+        ):
+            op = self.consume()
+            right = self.parse_additive()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_additive(self):
+        expr = self.parse_multiplicative()
+        while self._check_value("+") or self._check_value("-"):
+            op = self.consume()
+            right = self.parse_multiplicative()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_multiplicative(self):
+        expr = self.parse_unary()
+        while any(self._check_value(v) for v in ("*", "/", "%")):
+            op = self.consume()
+            right = self.parse_unary()
+            expr = BinaryExpr(expr, op, right)
+        return expr
+
+    def parse_unary(self):
+        if self._check_value("!") or self._check_value("-"):
+            op = self.consume()
+            operand = self.parse_unary()
+            return UnaryExpr(op, operand)
+        return self.parse_call()
+
+    def parse_call(self):
+        expr = self.parse_primary()
+        while self._check_type(TokenType.LPAREN):
+            # function call
+            lparen = self.consume()  # LPAREN
+            args = []
+            if not self._check_type(TokenType.RPAREN):
+                args.append(self.parse_expression())
+                while self._check_type(TokenType.COMMA):
+                    self.consume()
+                    args.append(self.parse_expression())
+            self.expect('RPAREN')
+            expr = CallExpr(expr, args)
+        return expr
+
+    def parse_primary(self):
         token = self.peek()
-        if token.type == TokenType.INT or token.type == TokenType.FLOAT or token.type == TokenType.STRING:
+        if token.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING):
             return Literal(self.consume())
-        elif token.type == TokenType.IDENT:
+        if token.type == TokenType.KEYWORD and token.value in ("true", "false", "null"):
+            return Literal(self.consume())
+        if token.type == TokenType.IDENT:
             return Identifier(self.consume())
-        elif token.type == TokenType.LPAREN:
+        if token.type == TokenType.LPAREN:
             self.consume()
             expr = self.parse_expression()
             self.expect('RPAREN')
             return expr
-        else:
-            raise Exception(f"Unexpected token in expression: {token}")
+        raise Exception(f"Unexpected token in expression: {token}")
 
     # --- Token helpers ---
     def peek(self):
@@ -169,6 +245,16 @@ class Parser:
             if token.type.name == expected_type:
                 self.current_token_index += 1
                 return True
+        return False
+
+    def _check_type(self, token_type):
+        if self.current_token_index < len(self.tokens):
+            return self.tokens[self.current_token_index].type == token_type
+        return False
+
+    def _check_value(self, value):
+        if self.current_token_index < len(self.tokens):
+            return self.tokens[self.current_token_index].value == value
         return False
 
     def expect(self, expected_type):
