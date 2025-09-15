@@ -93,3 +93,40 @@
 - [ ] **Optimizations**: constant folding, dead code elimination
 - [ ] **Garbage collector** (mark-sweep) for heap objects
 
+## Running code
+
+- CLI usage via module:
+  - Run a file and call `main`:
+    - `python -m lang.cli examples/hello.cl`
+  - Specify entrypoint function:
+    - `python -m lang.cli path/to/file.cl --entry start`
+  - Run top-level only (no function call):
+    - `python -m lang.cli path/to/file.cl --no-entry`
+
+- Makefile helpers:
+  - Run an example: `make run EX=examples/hello.cl`
+  - Run all tests: `make test`
+  - Run common examples: `make examples`
+
+## Examples
+
+Each example includes a Run line at the top; a few quick ones:
+
+- Hello world:
+  - `python -m lang.cli examples/hello.cl`
+- Function call returning a value (42):
+  - `python -m lang.cli examples/add.cl`
+- While loop decrementing to zero:
+  - `python -m lang.cli examples/loop.cl`
+- Control flow with booleans and short-circuit:
+  - `python -m lang.cli examples/controls.cl`
+
+## Tests
+
+- Run the full suite:
+  - `make test`
+  - or individually:
+    - `python -m unittest tests/lexer_test.py -v`
+    - `python -m unittest tests/parser_test.py -v`
+    - `python -m unittest tests/parser_expr_test.py -v`
+    - `python -m unittest tests/interpreter_test.py -v`
