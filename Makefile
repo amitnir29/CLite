@@ -1,4 +1,4 @@
-.PHONY: test run examples
+.PHONY: test run examples lint
 
 PY := python3
 
@@ -27,3 +27,6 @@ examples:
 	$(PY) -m lang.cli examples/loop.cl
 	$(PY) -m lang.cli examples/controls.cl
 
+# Usage: make lint EX=examples/hello.cl
+lint:
+	$(PY) -m lang.lint_cli $(EX)
