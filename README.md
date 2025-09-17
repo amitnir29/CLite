@@ -63,35 +63,37 @@
 ## Goal Checklist (tick as I go)
 
 ### MVP — make programs run
-- [ ] **Lexer**: identifiers, ints, operators, comments
-- [ ] **Parser**: expressions, `;` statements, blocks `{ }`, functions
-- [ ] **AST**: nodes for Program/Func/Block/If/While/BinOp/Call
-- [ ] **Types**: `int`, `bool`, `void`
+- [x] **Lexer**: identifiers, ints/floats, strings, operators, comments
+- [x] **Parser**: expressions, `;` statements, blocks `{ }`, functions
+- [x] **AST**: nodes for Program/Func/If/While/Return/Assign/BinOp/Unary/Call
+- [x] **Types (syntax)**: `int`, `bool`, `void`
 - [ ] **Type checker**: variables, returns, function calls
-- [ ] **Runtime**: simple bytecode + stack-based VM
-- [ ] **Builtin**: `print`
-- [ ] **Examples**: `hello`, `fib`, a small loop demo
+- [x] **Runtime**: AST interpreter
+- [x] **Builtin**: `print`
+- [x] **Examples**: `hello`, `loop`, `controls`
 - [ ] **Nice errors**: file:line:col with a caret under the code
 
 ### Core language v1
-- [ ] Variables: `let` + assignment, block scoping & shadowing
-- [ ] Control flow: `if/else`, `while`, short-circuit `&&`/`||`
-- [ ] Operators: `+ - * / %`, comparisons, equality, unary `!`/`-`
-- [ ] Functions: typed params/returns, call/return stack
+- [x] Variables: `let` + assignment, block scoping
+- [x] Control flow: `if/else`, `while`, short-circuit `&&`/`||`
+- [x] Operators: `+ - * / %`, comparisons, equality, unary `!`/`-`
+- [x] Functions: typed params/returns, call/return
 - [ ] Return rules: require return in non-void paths
 
 ### Quality of life
 - [ ] `fmt`: formatter for indentation & spaces
 - [ ] `check`: type-check without running
 - [ ] REPL: quick lex/parse/type/execute loop
-- [ ] Tests: unit (lexer/parser/types) + end-to-end (run programs)
+- [x] Tests: unit (lexer/parser/interpreter)
+- [x] Linter: basic static checks (W001–W006)
+- [x] CLI: `python -m lang.cli` and Makefile helpers
 
 ### Optional
-- [ ] **Strings** (immutable) and `"..."` literals
-- [ ] **Arrays** `T[]` with bounds checks in debug mode
+- [x] **Strings**: `"..."` literals (basic)
+- [ ] **Arrays** `T[]`
 - [ ] **Structs**: `struct Point { x:int; y:int; }` and `p.x`
 - [ ] **Optimizations**: constant folding, dead code elimination
-- [ ] **Garbage collector** (mark-sweep) for heap objects
+- [ ] **Garbage collector** (mark-sweep)
 
 ## Running code
 
@@ -107,6 +109,25 @@
   - Run an example: `make run EX=examples/hello.cl`
   - Run all tests: `make test`
   - Run common examples: `make examples`
+
+## Linting
+
+Static checks for common issues (missing `;`, undefined variables):
+
+- Lint a file:
+  - `python -m lang.lint_cli examples/hello.cl`
+- Fail on warnings (CI):
+  - `python -m lang.lint_cli --fail-on-warn examples/*.cl`
+- Makefile helper:
+  - `make lint EX=examples/hello.cl`
+
+Warnings emitted
+- W001: Possible missing ';' at end of statement
+- W002: Use/assignment of undefined variable
+- W003: Missing ':' in variable declaration (`let x: T = ...`)
+- W004: Unbalanced delimiters (unmatched/uncclosed () {} [])
+- W005: Expected '(' after control keyword (`if`/`while`/`for`)
+- W006: Unclosed string literal
 
 ## Examples
 
