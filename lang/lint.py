@@ -35,14 +35,22 @@ class LintWarning:
 
 
 def lint_code(code: str) -> List[LintWarning]:
-    tokens = tokenize(code)
     warnings: List[LintWarning] = []
+    try:
+        tokens = tokenize(code)
+    except Exception:
+        # Tokenization failed (e.g., unterminated string). Fall back to text scans for robust warnings.
+        warnings.extend(_lint_unclosed_string_code(code))
+        warnings.extend(_lint_unbalanced_delimiters_code(code))
+        warnings.extend(_lint_control_missing_paren_code(code))
+        return warnings
+
     warnings.extend(_lint_missing_semicolons(tokens))
     warnings.extend(_lint_missing_colon_in_let(tokens))
     warnings.extend(_lint_unbalanced_delimiters(tokens))
     warnings.extend(_lint_control_missing_paren(tokens))
 
-    # Run parser to get AST for semantic checks. If it fails, we still return semicolon warnings.
+    # Run parser to get AST for semantic checks. If it fails, we still return token-based warnings.
     try:
         program = Parser(tokens).parse()
     except Exception:
@@ -347,6 +355,281 @@ def _lint_control_missing_paren(tokens: List[Token]) -> List[LintWarning]:
                     line=t.line,
                     column=t.column,
                 ))
+        i += 1
+    return out
+
+
+# --- Fallback text-scanning linters when tokenization fails ---
+def _lint_unclosed_string_code(code: str) -> List[LintWarning]:
+    out: List[LintWarning] = []
+    line = 1
+    col = 0
+    i = 0
+    n = len(code)
+    in_line_comment = False
+    in_block_comment = False
+    in_string = False
+    str_start_line = 0
+    str_start_col = 0
+
+    def at(idx):
+        return code[idx] if 0 <= idx < n else ''
+
+    while i < n:
+        ch = code[i]
+        col += 1
+        nxt = at(i + 1)
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '*':
+            in_block_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_block_comment:
+            if ch == '*' and nxt == '/':
+                in_block_comment = False
+                i += 2
+                col += 1
+                continue
+            if ch == '\n':
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '/':
+            in_line_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_line_comment:
+            if ch == '\n':
+                in_line_comment = False
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and ch == '"':
+            in_string = True
+            str_start_line, str_start_col = line, col
+            i += 1
+            continue
+        if in_string:
+            if ch == '\\':
+                # skip escaped next char
+                i += 2
+                col += 1
+                continue
+            if ch == '"':
+                in_string = False
+                i += 1
+                continue
+            if ch == '\n':
+                # newline inside string -> unclosed string literal
+                out.append(LintWarning(code='W006', message='Unclosed string literal', line=str_start_line, column=str_start_col))
+                in_string = False
+                line += 1
+                col = 0
+                i += 1
+                continue
+            i += 1
+            continue
+
+        if ch == '\n':
+            line += 1
+            col = 0
+        i += 1
+
+    if in_string:
+        out.append(LintWarning(code='W006', message='Unclosed string literal', line=str_start_line, column=str_start_col))
+    return out
+
+
+def _lint_unbalanced_delimiters_code(code: str) -> List[LintWarning]:
+    out: List[LintWarning] = []
+    line = 1
+    col = 0
+    i = 0
+    n = len(code)
+    in_line_comment = False
+    in_block_comment = False
+    in_string = False
+    stack: list[tuple[str, int, int]] = []
+
+    def at(idx):
+        return code[idx] if 0 <= idx < n else ''
+
+    while i < n:
+        ch = code[i]
+        col += 1
+        nxt = at(i + 1)
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '*':
+            in_block_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_block_comment:
+            if ch == '*' and nxt == '/':
+                in_block_comment = False
+                i += 2
+                col += 1
+                continue
+            if ch == '\n':
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '/':
+            in_line_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_line_comment:
+            if ch == '\n':
+                in_line_comment = False
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and ch == '"':
+            in_string = True
+            i += 1
+            continue
+        if in_string:
+            if ch == '\\':
+                i += 2
+                col += 1
+                continue
+            if ch == '"':
+                in_string = False
+                i += 1
+                continue
+            if ch == '\n':
+                # reset string state on newline for our purposes
+                in_string = False
+                line += 1
+                col = 0
+                i += 1
+                continue
+            i += 1
+            continue
+
+        if ch in '({[':
+            stack.append((ch, line, col))
+        elif ch in ')}]':
+            if not stack:
+                out.append(LintWarning(code='W004', message=f"Unmatched '{ch}'", line=line, column=col))
+            else:
+                top, l, c = stack[-1]
+                if (top, ch) in (('(', ')'), ('{', '}'), ('[', ']')):
+                    stack.pop()
+                else:
+                    out.append(LintWarning(code='W004', message=f"Unmatched '{ch}'", line=line, column=col))
+        if ch == '\n':
+            line += 1
+            col = 0
+        i += 1
+
+    for ch, l, c in stack:
+        out.append(LintWarning(code='W004', message=f"Unclosed '{ch}'", line=l, column=c))
+    return out
+
+
+def _lint_control_missing_paren_code(code: str) -> List[LintWarning]:
+    out: List[LintWarning] = []
+    line = 1
+    col = 0
+    i = 0
+    n = len(code)
+    in_line_comment = False
+    in_block_comment = False
+    in_string = False
+
+    def at(idx):
+        return code[idx] if 0 <= idx < n else ''
+
+    while i < n:
+        ch = code[i]
+        col += 1
+        nxt = at(i + 1)
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '*':
+            in_block_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_block_comment:
+            if ch == '*' and nxt == '/':
+                in_block_comment = False
+                i += 2
+                col += 1
+                continue
+            if ch == '\n':
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and not in_block_comment and not in_line_comment and ch == '/' and nxt == '/':
+            in_line_comment = True
+            i += 2
+            col += 1
+            continue
+        if in_line_comment:
+            if ch == '\n':
+                in_line_comment = False
+                line += 1
+                col = 0
+            i += 1
+            continue
+
+        if not in_string and ch == '"':
+            in_string = True
+            i += 1
+            continue
+        if in_string:
+            if ch == '\\':
+                i += 2
+                col += 1
+                continue
+            if ch == '"':
+                in_string = False
+                i += 1
+                continue
+            if ch == '\n':
+                in_string = False
+                line += 1
+                col = 0
+                i += 1
+                continue
+            i += 1
+            continue
+
+        # parse word
+        if ch.isalpha() or ch == '_':
+            start_line, start_col = line, col
+            j = i
+            while j < n and (code[j].isalnum() or code[j] == '_'):
+                j += 1
+            w = code[i:j]
+            # skip spaces
+            k = j
+            while k < n and code[k] in ' \t\r':
+                k += 1
+            if w in ('if', 'while', 'for'):
+                if k >= n or code[k] != '(':
+                    out.append(LintWarning(code='W005', message=f"Expected '(' after '{w}'", line=start_line, column=start_col))
+            i = j
+            col += (j - i)
+            continue
+
+        if ch == '\n':
+            line += 1
+            col = 0
         i += 1
     return out
 
